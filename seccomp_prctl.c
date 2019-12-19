@@ -10,6 +10,8 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+
 #define log_error(...)                                              \
 do {                                                                \
     fprintf(stdout, "[ERROR]%s: %d: ", __FILE__, __LINE__);         \
@@ -32,10 +34,8 @@ int filter_syscalls() {
 
     log_debug("filtering syscalls with bpf...");
 
-    prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-
-    // instructions
-    struct sock_filter sfi[8] = {
+    struct sock_filter code[] = {
+        /* op,   jt,   jf,     k    */
         {0x20, 0x00, 0x00, 0x00000004},
         {0x15, 0x00, 0x05, 0xc000003e},
         {0x20, 0x00, 0x00, 0x00000000},
@@ -45,18 +45,17 @@ int filter_syscalls() {
         {0x06, 0x00, 0x00, 0x7fff0000},
         {0x06, 0x00, 0x00, 0x00000000},
     };
-    /*
-     hd seccomp_filter.bpf
-00000000  20 00 00 00 04 00 00 00  15 00 00 05 3e 00 00 c0  | ...........>...|
-00000010  20 00 00 00 00 00 00 00  35 00 00 01 00 00 00 40  | .......5......@|
-00000020  15 00 00 02 ff ff ff ff  15 00 01 00 0c 01 00 00  |................|
-00000030  06 00 00 00 00 00 ff 7f  06 00 00 00 00 00 00 00  |................|
-00000040
-     */
-    // program
-    struct sock_fprog sfp = {8, sfi};
 
-    prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &sfp);
+    struct sock_fprog bpf = {
+        .len = ARRAY_SIZE(code),
+        .filter = code,
+    };
+
+    ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+    if (ret < 0) { log_error("error prctl set no new privs"); return EXIT_FAILURE; }
+
+    prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &bpf);
+    if (ret < 0) { log_error("error prctl set seccomp filter"); return EXIT_FAILURE; }
 
     return 0;
 }
