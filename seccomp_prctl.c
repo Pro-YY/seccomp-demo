@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/prctl.h>
+#include <seccomp.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 
@@ -42,8 +43,8 @@ int filter_syscalls() {
         {0x35, 0x00, 0x01, 0x40000000},
         {0x15, 0x00, 0x02, 0xffffffff},
         {0x15, 0x01, 0x00, 0x0000010c}, // 268 fchmodat
-        {0x06, 0x00, 0x00, 0x7fff0000},
-        {0x06, 0x00, 0x00, 0x00000000},
+        {0x06, 0x00, 0x00, 0x7fff0000}, // BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+        {0x06, 0x00, 0x00, 0x00000000}, // BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL),
     };
 
     struct sock_fprog bpf = {
@@ -54,8 +55,10 @@ int filter_syscalls() {
     ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
     if (ret < 0) { log_error("error prctl set no new privs"); return EXIT_FAILURE; }
 
-    prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &bpf);
-    if (ret < 0) { log_error("error prctl set seccomp filter"); return EXIT_FAILURE; }
+    //ret = seccomp(SECCOMP_MODE_FILTER, 0, &bpf);
+    ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &bpf);
+    // identical to: prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &bpf);
+    if (ret < 0) { log_error("error set seccomp filter"); return EXIT_FAILURE; }
 
     return 0;
 }
